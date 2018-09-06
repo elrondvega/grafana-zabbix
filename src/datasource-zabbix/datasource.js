@@ -28,7 +28,7 @@ export class ZabbixDatasource {
     const jsonData = migrations.migrateDSConfig(instanceSettings.jsonData);
 
     // Zabbix API credentials
-    this.username         = jsonData.username;
+    this.username         = backendSrv.contextSrv.user.login;//jsonData.username;
     this.password         = jsonData.password;
 
     // Use trends instead history since specified time

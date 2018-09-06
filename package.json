@@ -51,7 +51,6 @@
     "systemjs": "^0.20.19",
     "tether-drop": "^1.4.2"
   },
-  "dependencies": {
-  },
+  "dependencies": {},
   "homepage": "http://grafana-zabbix.org"
 }
