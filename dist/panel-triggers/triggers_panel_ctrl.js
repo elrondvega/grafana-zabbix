@@ -321,6 +321,7 @@ System.register(['lodash', 'jquery', 'moment', '../datasource-zabbix/utils', 'ap
               return _this5.datasourceSrv.get(ds).then(function (datasource) {
                 var zabbix = datasource.zabbix;
                 var showEvents = _this5.panel.showEvents.value;
+                var limit = _this5.panel.limit;
                 var triggerFilter = _this5.panel.targets[ds];
 
                 // Replace template variables
@@ -329,7 +330,8 @@ System.register(['lodash', 'jquery', 'moment', '../datasource-zabbix/utils', 'ap
                 var appFilter = datasource.replaceTemplateVars(triggerFilter.application.filter);
 
                 var triggersOptions = {
-                  showTriggers: showEvents
+                  showTriggers: showEvents,
+                  limit: limit
                 };
 
                 return zabbix.getTriggers(groupFilter, hostFilter, appFilter, triggersOptions);

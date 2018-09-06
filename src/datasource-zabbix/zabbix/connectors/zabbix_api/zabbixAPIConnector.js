@@ -327,7 +327,7 @@ export class ZabbixAPIConnector {
   }
 
   getTriggers(groupids, hostids, applicationids, options) {
-    let {showTriggers, maintenance, timeFrom, timeTo} = options;
+    let {showTriggers, maintenance, timeFrom, timeTo, limit} = options;
 
     let params = {
       output: 'extend',
@@ -339,6 +339,10 @@ export class ZabbixAPIConnector {
       expandComment: true,
       monitored: true,
       skipDependent: true,
+      limit: limit,
+      sortfield: 'lastchange',
+      ortorder: 'DESC',
+      min_severity: 4,
       //only_true: true,
       filter: {
         value: 1

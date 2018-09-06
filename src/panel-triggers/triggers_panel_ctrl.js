@@ -200,6 +200,7 @@ export class TriggerPanelCtrl extends PanelCtrl {
       .then(datasource => {
         var zabbix = datasource.zabbix;
         var showEvents = this.panel.showEvents.value;
+        var limit = this.panel.limit;
         var triggerFilter = this.panel.targets[ds];
 
         // Replace template variables
@@ -208,7 +209,8 @@ export class TriggerPanelCtrl extends PanelCtrl {
         var appFilter = datasource.replaceTemplateVars(triggerFilter.application.filter);
 
         let triggersOptions = {
-          showTriggers: showEvents
+          showTriggers: showEvents,
+          limit: limit
         };
 
         return zabbix.getTriggers(groupFilter, hostFilter, appFilter, triggersOptions);

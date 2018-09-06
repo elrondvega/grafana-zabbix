@@ -389,7 +389,8 @@ System.register(['lodash', '../../../utils', './zabbixAPICore'], function (_expo
             var showTriggers = options.showTriggers,
                 maintenance = options.maintenance,
                 timeFrom = options.timeFrom,
-                timeTo = options.timeTo;
+                timeTo = options.timeTo,
+                limit = options.limit;
 
 
             var params = {
@@ -402,6 +403,10 @@ System.register(['lodash', '../../../utils', './zabbixAPICore'], function (_expo
               expandComment: true,
               monitored: true,
               skipDependent: true,
+              limit: limit,
+              sortfield: 'lastchange',
+              ortorder: 'DESC',
+              min_severity: 4,
               //only_true: true,
               filter: {
                 value: 1
