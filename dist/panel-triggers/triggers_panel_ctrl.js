@@ -154,6 +154,10 @@ System.register(['lodash', 'jquery', 'moment', '../datasource-zabbix/utils', 'ap
         highlightNewerThan: '1h',
         customLastChangeFormat: false,
         lastChangeFormat: "",
+        link1: "",
+        text1: "",
+        link2: "",
+        text2: "",
         // Triggers severity and colors
         triggerSeverity: DEFAULT_SEVERITY,
         okEventColor: 'rgb(56, 189, 113)',
@@ -637,6 +641,9 @@ System.register(['lodash', 'jquery', 'moment', '../datasource-zabbix/utils', 'ap
               host = trigger.host + ' (' + trigger.hostTechName + ')';
             } else if (this.panel.hostField || this.panel.hostTechNameField) {
               host = this.panel.hostField ? trigger.host : trigger.hostTechName;
+            }
+            if (this.panel.link1) {
+              host = trigger.host + ' <a href=this.panel.link1>this.panel.test1</a> <a href=this.panel.link2>this.panel.text2</a>';
             }
 
             return host;
