@@ -55,6 +55,10 @@ export const PANEL_DEFAULTS = {
   highlightNewerThan: '1h',
   customLastChangeFormat: false,
   lastChangeFormat: "",
+  link1: "",
+  text1: "",
+  link2: "",
+  text2: "",
   // Triggers severity and colors
   triggerSeverity: DEFAULT_SEVERITY,
   okEventColor: 'rgb(56, 189, 113)',
@@ -490,6 +494,12 @@ export class TriggerPanelCtrl extends PanelCtrl {
     }
 
     return host;
+  }
+
+  formatLink(trigger,link) {
+    let hostlink = link.replace("$hostid",trigger.hosts[0].hostid);
+    hostlink = hostlink.replace("$host",trigger.host);
+    return hostlink;
   }
 
   formatHostGroups(trigger) {

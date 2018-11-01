@@ -341,7 +341,7 @@ export class ZabbixAPIConnector {
       skipDependent: true,
       limit: limit,
       sortfield: 'lastchange',
-      ortorder: 'DESC',
+      sortorder: 'DESC',
       min_severity: 4,
       //only_true: true,
       filter: {

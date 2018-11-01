@@ -21,6 +21,8 @@
                   <i ng-if="trigger.maintenance" class="fa fa-wrench zbx-maintenance-icon"></i>
                   {{ ctrl.formatHostName(trigger) }}
                 </span>
+                <a ng-if="ctrl.panel.link1" href="{{ ctrl.formatLink(trigger,ctrl.panel.link1) }}" target="_blank">{{ ctrl.panel.text1 }}</a>
+                <a ng-if="ctrl.panel.link2" href="{{ ctrl.formatLink(trigger,ctrl.panel.link2) }}" target="_blink">{{ ctrl.panel.text2 }}</a>
                 <span class="zabbix-hostname" ng-if="ctrl.panel.hostGroups">
                   {{ ctrl.formatHostGroups(trigger) }}
                 </span>
