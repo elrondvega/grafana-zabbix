@@ -215,7 +215,11 @@ System.register(['lodash', 'app/core/utils/datemath', './utils', './migrations',
           var jsonData = migrations.migrateDSConfig(instanceSettings.jsonData);
 
           // Zabbix API credentials
-          this.username = backendSrv.contextSrv.user.login; //jsonData.username;
+          if (jsonData.authpassthru) {
+            this.username = backendSrv.contextSrv.user.login;
+          } else {
+            this.username = jsonData.username;
+          }
           this.password = jsonData.password;
 
           // Use trends instead history since specified time
