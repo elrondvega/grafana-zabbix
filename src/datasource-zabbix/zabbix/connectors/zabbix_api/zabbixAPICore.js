@@ -38,6 +38,10 @@ export class ZabbixAPICore {
       }
     };
 
+    if (!options.authpassthru) {
+      requestOptions.headers['es-security-runas-user'] = options.username;
+    }
+
     // Set request options for basic auth
     if (options.basicAuth || options.withCredentials) {
       requestOptions.withCredentials = true;

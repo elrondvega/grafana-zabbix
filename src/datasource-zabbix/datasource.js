@@ -28,6 +28,7 @@ export class ZabbixDatasource {
     const jsonData = migrations.migrateDSConfig(instanceSettings.jsonData);
 
     // Zabbix API credentials
+    this.authpassthru     = jsonData.authpassthru;
     if (jsonData.authpassthru) {
       this.username       = backendSrv.contextSrv.user.login;
     } else {
@@ -62,6 +63,7 @@ export class ZabbixDatasource {
       username: this.username,
       password: this.password,
       basicAuth: this.basicAuth,
+      authpassthru: this.authpassthru,
       withCredentials: this.withCredentials,
       cacheTTL: this.cacheTTL,
       enableDirectDBConnection: this.enableDirectDBConnection,

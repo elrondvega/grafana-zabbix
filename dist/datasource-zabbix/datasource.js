@@ -215,6 +215,7 @@ System.register(['lodash', 'app/core/utils/datemath', './utils', './migrations',
           var jsonData = migrations.migrateDSConfig(instanceSettings.jsonData);
 
           // Zabbix API credentials
+          this.authpassthru = jsonData.authpassthru;
           if (jsonData.authpassthru) {
             this.username = backendSrv.contextSrv.user.login;
           } else {
@@ -249,6 +250,7 @@ System.register(['lodash', 'app/core/utils/datemath', './utils', './migrations',
             username: this.username,
             password: this.password,
             basicAuth: this.basicAuth,
+            authpassthru: this.authpassthru,
             withCredentials: this.withCredentials,
             cacheTTL: this.cacheTTL,
             enableDirectDBConnection: this.enableDirectDBConnection,
