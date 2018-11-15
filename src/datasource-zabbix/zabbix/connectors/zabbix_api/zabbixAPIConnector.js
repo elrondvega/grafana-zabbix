@@ -8,7 +8,7 @@ import { ZabbixAPICore } from './zabbixAPICore';
  * Wraps API calls and provides high-level methods.
  */
 export class ZabbixAPIConnector {
-  constructor(api_url, username, password, basicAuth, withCredentials, backendSrv) {
+  constructor(api_url, username, password, basicAuth, withCredentials, authpassthru, backendSrv) {
     this.url              = api_url;
     this.username         = username;
     this.password         = password;
@@ -16,7 +16,8 @@ export class ZabbixAPIConnector {
 
     this.requestOptions = {
       basicAuth: basicAuth,
-      withCredentials: withCredentials
+      withCredentials: withCredentials,
+      authpassthru: authpassthru
     };
 
     this.loginPromise = null;

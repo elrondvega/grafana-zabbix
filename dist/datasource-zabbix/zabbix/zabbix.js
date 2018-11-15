@@ -171,6 +171,7 @@ System.register(['lodash', '../utils', '../responseHandler', './connectors/zabbi
               username = options.username,
               password = options.password,
               basicAuth = options.basicAuth,
+              authpassthru = options.authpassthru,
               withCredentials = options.withCredentials,
               cacheTTL = options.cacheTTL,
               enableDirectDBConnection = options.enableDirectDBConnection,
@@ -187,7 +188,7 @@ System.register(['lodash', '../utils', '../responseHandler', './connectors/zabbi
           };
           this.cachingProxy = new CachingProxy(cacheOptions);
 
-          this.zabbixAPI = new ZabbixAPIConnector(url, username, password, basicAuth, withCredentials, backendSrv);
+          this.zabbixAPI = new ZabbixAPIConnector(url, username, password, basicAuth, withCredentials, authpassthru, backendSrv);
 
           if (enableDirectDBConnection) {
             var dbConnectorOptions = {

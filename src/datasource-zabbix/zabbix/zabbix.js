@@ -27,6 +27,7 @@ export class Zabbix {
       username,
       password,
       basicAuth,
+      authpassthru,
       withCredentials,
       cacheTTL,
       enableDirectDBConnection,
@@ -43,7 +44,7 @@ export class Zabbix {
     };
     this.cachingProxy = new CachingProxy(cacheOptions);
 
-    this.zabbixAPI = new ZabbixAPIConnector(url, username, password, basicAuth, withCredentials, backendSrv);
+    this.zabbixAPI = new ZabbixAPIConnector(url, username, password, basicAuth, withCredentials, authpassthru, backendSrv);
 
     if (enableDirectDBConnection) {
       let dbConnectorOptions = {

@@ -94,7 +94,7 @@ System.register(['lodash', '../../../utils', './zabbixAPICore'], function (_expo
       }();
 
       _export('ZabbixAPIConnector', ZabbixAPIConnector = function () {
-        function ZabbixAPIConnector(api_url, username, password, basicAuth, withCredentials, backendSrv) {
+        function ZabbixAPIConnector(api_url, username, password, basicAuth, withCredentials, authpassthru, backendSrv) {
           _classCallCheck(this, ZabbixAPIConnector);
 
           this.url = api_url;
@@ -104,7 +104,8 @@ System.register(['lodash', '../../../utils', './zabbixAPICore'], function (_expo
 
           this.requestOptions = {
             basicAuth: basicAuth,
-            withCredentials: withCredentials
+            withCredentials: withCredentials,
+            authpassthru: authpassthru
           };
 
           this.loginPromise = null;
