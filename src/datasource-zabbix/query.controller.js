@@ -1,4 +1,4 @@
-import { QueryCtrl } from 'app/plugins/sdk';
+import { QueryCtrl } from 'grafana/app/plugins/sdk';
 import _ from 'lodash';
 import * as c from './constants';
 import * as utils from './utils';
@@ -7,7 +7,7 @@ import * as migrations from './migrations';
 
 export class ZabbixQueryController extends QueryCtrl {
 
-  // ZabbixQueryCtrl constructor
+  /** @ngInject */
   constructor($scope, $injector, $rootScope, $sce, templateSrv) {
     super($scope, $injector);
     this.zabbix = this.datasource.zabbix;

@@ -1,11 +1,12 @@
 import _ from 'lodash';
-import {DEFAULT_TARGET} from './triggers_panel_ctrl';
+import { getDefaultTarget } from './triggers_panel_ctrl';
 
 // Actual schema version
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 6;
 
 export function migratePanelSchema(panel) {
   if (isEmptyPanel(panel)) {
+    delete panel.targets;
     return panel;
   }
 
@@ -25,17 +26,22 @@ export function migratePanelSchema(panel) {
   if (schemaVersion < 3) {
     // delete old props
     delete panel.lastChangeField;
-    delete panel.ageField;
     delete panel.infoField;
     delete panel.scroll;
     delete panel.hideHostsInMaintenance;
   }
 
-  if (schemaVersion < 4) {
+  if (schemaVersion < 5) {
     if (panel.targets && !_.isEmpty(panel.targets)) {
       _.each(panel.targets, (target) => {
-        _.defaultsDeep(target, DEFAULT_TARGET);
+        _.defaultsDeep(target, getDefaultTarget());
       });
+    }
+  }
+
+  if (schemaVersion < 6) {
+    if (panel.showEvents && panel.showEvents.value === '1') {
+      panel.showEvents.value = 1;
     }
   }
 
@@ -47,5 +53,9 @@ function getSchemaVersion(panel) {
 }
 
 function isEmptyPanel(panel) {
-  return !panel.datasource && !panel.datasources && !panel.triggers && !panel.targets;
+  return !panel.datasource && !panel.datasources && !panel.triggers && isEmptyTargets(panel.targets);
+}
+
+function isEmptyTargets(targets) {
+  return !targets || (_.isArray(targets) && (targets.length === 0 || targets.length === 1 && _.isEmpty(targets[0])));
 }

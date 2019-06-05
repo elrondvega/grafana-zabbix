@@ -1,13 +1,18 @@
+import React from 'react';
+import ReactDOM from 'react-dom';
 import _ from 'lodash';
-import $ from 'jquery';
 import moment from 'moment';
+import * as dateMath from 'grafana/app/core/utils/datemath';
 import * as utils from '../datasource-zabbix/utils';
-import {PanelCtrl} from 'app/plugins/sdk';
-import {triggerPanelOptionsTab} from './options_tab';
-import {triggerPanelTriggersTab} from './triggers_tab';
-import {migratePanelSchema, CURRENT_SCHEMA_VERSION} from './migrations';
+import { PanelCtrl } from 'grafana/app/plugins/sdk';
+import { triggerPanelOptionsTab } from './options_tab';
+import { triggerPanelTriggersTab } from './triggers_tab';
+import { migratePanelSchema, CURRENT_SCHEMA_VERSION } from './migrations';
+import ProblemList from './components/Problems/Problems';
+import AlertList from './components/AlertList/AlertList';
 
 const ZABBIX_DS_ID = 'alexanderzobnin-zabbix-datasource';
+const PROBLEM_EVENTS_LIMIT = 100;
 
 export const DEFAULT_TARGET = {
   group: {filter: ""},
@@ -15,7 +20,10 @@ export const DEFAULT_TARGET = {
   application: {filter: ""},
   trigger: {filter: ""},
   tags: {filter: ""},
+  proxy: {filter: ""},
 };
+
+export const getDefaultTarget = () => DEFAULT_TARGET;
 
 export const DEFAULT_SEVERITY = [
   { priority: 0, severity: 'Not classified',  color: 'rgb(108, 108, 108)', show: true},
@@ -25,6 +33,8 @@ export const DEFAULT_SEVERITY = [
   { priority: 4, severity: 'High',            color: 'rgb(255, 101, 72)', show: true},
   { priority: 5, severity: 'Disaster',        color: 'rgb(215, 0, 0)', show: true},
 ];
+
+export const getDefaultSeverity = () => DEFAULT_SEVERITY;
 
 const DEFAULT_TIME_FORMAT = "DD MMM YYYY HH:mm:ss";
 
@@ -36,20 +46,25 @@ export const PANEL_DEFAULTS = {
   hostField: true,
   hostTechNameField: false,
   hostGroups: false,
+  hostProxy: false,
   showTags: true,
   statusField: true,
+  statusIcon: false,
   severityField: true,
+  ageField: false,
   descriptionField: true,
   descriptionAtNewLine: false,
   // Options
   hostsInMaintenance: true,
   showTriggers: 'all triggers',
   sortTriggersBy: { text: 'last change', value: 'lastchange' },
-  showEvents: { text: 'Problems', value: '1' },
+  showEvents: { text: 'Problems', value: 1 },
   limit: 100,
   // View options
+  layout: 'table',
   fontSize: '100%',
   pageSize: 10,
+  problemTimeline: true,
   highlightBackground: false,
   highlightNewEvents: false,
   highlightNewerThan: '1h',
@@ -59,10 +74,12 @@ export const PANEL_DEFAULTS = {
   text1: "",
   link2: "",
   text2: "",
+  resizedColumns: [],
   // Triggers severity and colors
-  triggerSeverity: DEFAULT_SEVERITY,
+  triggerSeverity: getDefaultSeverity(),
   okEventColor: 'rgb(56, 189, 113)',
-  ackEventColor: 'rgb(56, 219, 156)'
+  ackEventColor: 'rgb(56, 219, 156)',
+  markAckEvents: false,
 };
 
 const triggerStatusMap = {
@@ -73,12 +90,13 @@ const triggerStatusMap = {
 export class TriggerPanelCtrl extends PanelCtrl {
 
   /** @ngInject */
-  constructor($scope, $injector, $timeout, datasourceSrv, templateSrv, contextSrv, dashboardSrv) {
+  constructor($scope, $injector, $timeout, datasourceSrv, templateSrv, contextSrv, dashboardSrv, timeSrv) {
     super($scope, $injector);
     this.datasourceSrv = datasourceSrv;
     this.templateSrv = templateSrv;
     this.contextSrv = contextSrv;
     this.dashboardSrv = dashboardSrv;
+    this.timeSrv = timeSrv;
     this.scope = $scope;
     this.$timeout = $timeout;
 
@@ -87,8 +105,8 @@ export class TriggerPanelCtrl extends PanelCtrl {
     this.defaultTimeFormat = DEFAULT_TIME_FORMAT;
     this.pageIndex = 0;
     this.triggerList = [];
-    this.currentTriggersPage = [];
     this.datasources = {};
+    this.range = {};
 
     this.panel = migratePanelSchema(this.panel);
     _.defaultsDeep(this.panel, _.cloneDeep(PANEL_DEFAULTS));
@@ -97,13 +115,30 @@ export class TriggerPanelCtrl extends PanelCtrl {
     if (this.panel.datasources.length === 0) {
       this.panel.datasources.push(this.available_datasources[0]);
     }
-    if (_.isEmpty(this.panel.targets)) {
-      this.panel.targets[this.panel.datasources[0]] = DEFAULT_TARGET;
+    if (this.isEmptyTargets()) {
+      this.panel.targets[this.panel.datasources[0]] = getDefaultTarget();
     }
 
     this.initDatasources();
     this.events.on('init-edit-mode', this.onInitEditMode.bind(this));
     this.events.on('refresh', this.onRefresh.bind(this));
+  }
+
+  setPanelError(err, defaultError) {
+    const defaultErrorMessage = defaultError || "Request Error";
+    this.inspector = { error: err };
+    this.error = err.message || defaultErrorMessage;
+    if (err.data) {
+      if (err.data.message) {
+        this.error = err.data.message;
+      }
+      if (err.data.error) {
+        this.error = err.data.error;
+      }
+    }
+
+    this.events.emit('data-error', err);
+    console.log('Panel data error:', err);
   }
 
   initDatasources() {
@@ -124,6 +159,15 @@ export class TriggerPanelCtrl extends PanelCtrl {
     });
   }
 
+  isEmptyTargets() {
+    const emptyTargets = _.isEmpty(this.panel.targets);
+    const emptyTarget = (this.panel.targets.length === 1 && (
+      _.isEmpty(this.panel.targets[0]) ||
+      this.panel.targets[0].target === ""
+    ));
+    return emptyTargets || emptyTarget;
+  }
+
   onInitEditMode() {
     this.addEditorTab('Triggers', triggerPanelTriggersTab, 1);
     this.addEditorTab('Options', triggerPanelOptionsTab, 2);
@@ -134,12 +178,14 @@ export class TriggerPanelCtrl extends PanelCtrl {
   }
 
   setTimeQueryEnd() {
-    this.timing.queryEnd = new Date().getTime();
+    this.timing.queryEnd = (new Date()).getTime();
   }
 
   onRefresh() {
     // ignore fetching data if another panel is in fullscreen
     if (this.otherPanelInFullscreenMode()) { return; }
+
+    this.range = this.timeSrv.timeRange();
 
     // clear loading/error state
     delete this.error;
@@ -148,38 +194,30 @@ export class TriggerPanelCtrl extends PanelCtrl {
     this.pageIndex = 0;
 
     return this.getTriggers()
-    .then(zabbixTriggers => {
+    .then(triggers => {
       // Notify panel that request is finished
       this.loading = false;
       this.setTimeQueryEnd();
-
-      this.render(zabbixTriggers);
+      return this.renderTriggers(triggers);
+    })
+    .then(() => {
+      this.$timeout(() => {
+        this.renderingCompleted();
+      });
     })
     .catch(err => {
-      // if cancelled  keep loading set to true
+      this.loading = false;
+
       if (err.cancelled) {
         console.log('Panel request cancelled', err);
         return;
       }
 
-      this.loading = false;
-      this.error = err.message || "Request Error";
-
-      if (err.data) {
-        if (err.data.message) {
-          this.error = err.data.message;
-        }
-        if (err.data.error) {
-          this.error = err.data.error;
-        }
-      }
-
-      this.events.emit('data-error', err);
-      console.log('Panel data error:', err);
+      this.setPanelError(err);
     });
   }
 
-  render(zabbixTriggers) {
+  renderTriggers(zabbixTriggers) {
     let triggers = _.cloneDeep(zabbixTriggers || this.triggerListUnfiltered);
     this.triggerListUnfiltered = _.cloneDeep(triggers);
 
@@ -191,74 +229,92 @@ export class TriggerPanelCtrl extends PanelCtrl {
     triggers = triggers.slice(0, this.panel.limit || PANEL_DEFAULTS.limit);
 
     this.triggerList = triggers;
-    this.getCurrentTriggersPage();
 
-    this.$timeout(() => {
-      super.render(this.triggerList);
+    return this.$timeout(() => {
+      return super.render(this.triggerList);
     });
   }
 
   getTriggers() {
+    const timeFrom = Math.ceil(dateMath.parse(this.range.from) / 1000);
+    const timeTo = Math.ceil(dateMath.parse(this.range.to) / 1000);
+    const userIsEditor = this.contextSrv.isEditor || this.contextSrv.isGrafanaAdmin;
+
     let promises = _.map(this.panel.datasources, (ds) => {
+      let proxies;
+      let showAckButton = true;
       return this.datasourceSrv.get(ds)
       .then(datasource => {
-        var zabbix = datasource.zabbix;
-        var showEvents = this.panel.showEvents.value;
-        var limit = this.panel.limit;
-        var triggerFilter = this.panel.targets[ds];
+        const zabbix = datasource.zabbix;
+        const showEvents = this.panel.showEvents.value;
+        const triggerFilter = this.panel.targets[ds];
+        const showProxy = this.panel.hostProxy;
+        const getProxiesPromise = showProxy ? zabbix.getProxies() : () => [];
+        showAckButton = !datasource.disableReadOnlyUsersAck || userIsEditor;
 
         // Replace template variables
-        var groupFilter = datasource.replaceTemplateVars(triggerFilter.group.filter);
-        var hostFilter = datasource.replaceTemplateVars(triggerFilter.host.filter);
-        var appFilter = datasource.replaceTemplateVars(triggerFilter.application.filter);
+        const groupFilter = datasource.replaceTemplateVars(triggerFilter.group.filter);
+        const hostFilter = datasource.replaceTemplateVars(triggerFilter.host.filter);
+        const appFilter = datasource.replaceTemplateVars(triggerFilter.application.filter);
+        const proxyFilter = datasource.replaceTemplateVars(triggerFilter.proxy.filter);
 
         let triggersOptions = {
           showTriggers: showEvents,
           limit: limit
         };
 
-        return zabbix.getTriggers(groupFilter, hostFilter, appFilter, triggersOptions);
-      }).then((triggers) => {
-        return this.getAcknowledges(triggers, ds);
-      }).then((triggers) => {
-        return this.setMaintenanceStatus(triggers);
-      }).then((triggers) => {
-        return this.filterTriggersPre(triggers, ds);
-      }).then((triggers) => {
-        return this.addTriggerDataSource(triggers, ds);
-      });
+        if (showEvents !== 1) {
+          triggersOptions.timeFrom = timeFrom;
+          triggersOptions.timeTo = timeTo;
+        }
+
+        return Promise.all([
+          zabbix.getTriggers(groupFilter, hostFilter, appFilter, triggersOptions, proxyFilter),
+          getProxiesPromise
+        ]);
+      }).then(([triggers, sourceProxies]) => {
+        proxies = _.keyBy(sourceProxies, 'proxyid');
+        const eventids = _.compact(triggers.map(trigger => {
+          return trigger.lastEvent.eventid;
+        }));
+        return Promise.all([
+          this.datasources[ds].zabbix.getExtendedEventData(eventids),
+          Promise.resolve(triggers)
+        ]);
+      })
+      .then(([events, triggers]) => {
+        this.addEventTags(events, triggers);
+        this.addAcknowledges(events, triggers);
+        return triggers;
+      })
+      .then(triggers => this.setMaintenanceStatus(triggers))
+      .then(triggers => this.setAckButtonStatus(triggers, showAckButton))
+      .then(triggers => this.filterTriggersPre(triggers, ds))
+      .then(triggers => this.addTriggerDataSource(triggers, ds))
+      .then(triggers => this.addTriggerHostProxy(triggers, proxies));
     });
 
     return Promise.all(promises)
     .then(results => _.flatten(results));
   }
 
-  getAcknowledges(triggerList, ds) {
-    // Request acknowledges for trigger
-    var eventids = _.map(triggerList, trigger => {
-      return trigger.lastEvent.eventid;
-    });
-
-    return this.datasources[ds].zabbix.getAcknowledges(eventids)
-    .then(events => {
-
-      // Map events to triggers
-      _.each(triggerList, trigger => {
-        var event = _.find(events, event => {
-          return event.eventid === trigger.lastEvent.eventid;
-        });
-
-        if (event) {
-          trigger.acknowledges = _.map(event.acknowledges, this.formatAcknowledge.bind(this));
-        }
-
-        if (!trigger.lastEvent.eventid) {
-          trigger.lastEvent = null;
-        }
+  addAcknowledges(events, triggers) {
+    // Map events to triggers
+    _.each(triggers, trigger => {
+      var event = _.find(events, event => {
+        return event.eventid === trigger.lastEvent.eventid;
       });
 
-      return triggerList;
+      if (event) {
+        trigger.acknowledges = _.map(event.acknowledges, this.formatAcknowledge.bind(this));
+      }
+
+      if (!trigger.lastEvent.eventid) {
+        trigger.lastEvent = null;
+      }
     });
+
+    return triggers;
   }
 
   formatAcknowledge(ack) {
@@ -274,6 +330,18 @@ export class TriggerPanelCtrl extends PanelCtrl {
       ack.user += ` (${fullName})`;
     }
     return ack;
+  }
+
+  addEventTags(events, triggers) {
+    _.each(triggers, trigger => {
+      var event = _.find(events, event => {
+        return event.eventid === trigger.lastEvent.eventid;
+      });
+      if (event && event.tags && event.tags.length) {
+        trigger.tags = event.tags;
+      }
+    });
+    return triggers;
   }
 
   filterTriggersPre(triggerList, ds) {
@@ -307,12 +375,12 @@ export class TriggerPanelCtrl extends PanelCtrl {
     // Filter acknowledged triggers
     if (this.panel.showTriggers === 'unacknowledged') {
       triggerList = _.filter(triggerList, trigger => {
-        return !trigger.acknowledges;
+        return !(trigger.acknowledges && trigger.acknowledges.length);
       });
     } else if (this.panel.showTriggers === 'acknowledged') {
-      triggerList = _.filter(triggerList, 'acknowledges');
-    } else {
-      triggerList = triggerList;
+      triggerList = _.filter(triggerList, trigger => {
+        return trigger.acknowledges && trigger.acknowledges.length;
+      });
     }
 
     // Filter by maintenance status
@@ -336,9 +404,29 @@ export class TriggerPanelCtrl extends PanelCtrl {
     return triggers;
   }
 
+  setAckButtonStatus(triggers, showAckButton) {
+    _.each(triggers, (trigger) => {
+      trigger.showAckButton = showAckButton;
+    });
+    return triggers;
+  }
+
   addTriggerDataSource(triggers, ds) {
     _.each(triggers, (trigger) => {
       trigger.datasource = ds;
+    });
+    return triggers;
+  }
+
+  addTriggerHostProxy(triggers, proxies) {
+    triggers.forEach(trigger => {
+      if (trigger.hosts && trigger.hosts.length) {
+        let host = trigger.hosts[0];
+        if (host.proxy_hostid !== '0') {
+          const hostProxy = proxies[host.proxy_hostid];
+          host.proxy = hostProxy ? hostProxy.host : '';
+        }
+      }
     });
     return triggers;
   }
@@ -354,12 +442,15 @@ export class TriggerPanelCtrl extends PanelCtrl {
 
   formatTrigger(zabbixTrigger) {
     let trigger = _.cloneDeep(zabbixTrigger);
-    let triggerObj = trigger;
 
-    // Set host that the trigger belongs
+    // Set host and proxy that the trigger belongs
     if (trigger.hosts && trigger.hosts.length) {
-      triggerObj.host = trigger.hosts[0].name;
-      triggerObj.hostTechName = trigger.hosts[0].host;
+      const host = trigger.hosts[0];
+      trigger.host = host.name;
+      trigger.hostTechName = host.host;
+      if (host.proxy) {
+        trigger.proxy = host.proxy;
+      }
     }
 
     // Set tags if present
@@ -372,52 +463,7 @@ export class TriggerPanelCtrl extends PanelCtrl {
       trigger.comments = trigger.comments.replace('\n', '<br>');
     }
 
-    // Format last change and age
     trigger.lastchangeUnix = Number(trigger.lastchange);
-    triggerObj = this.setTriggerLastChange(triggerObj);
-    triggerObj = this.setTriggerSeverity(triggerObj);
-    return triggerObj;
-  }
-
-  updateTriggerFormat(trigger) {
-    trigger = this.setTriggerLastChange(trigger);
-    trigger = this.setTriggerSeverity(trigger);
-    return trigger;
-  }
-
-  setTriggerSeverity(trigger) {
-    if (trigger.value === '1') {
-      // Problem state
-      trigger.color = this.panel.triggerSeverity[trigger.priority].color;
-    } else {
-      // OK state
-      trigger.color = this.panel.okEventColor;
-    }
-    trigger.severity = this.panel.triggerSeverity[trigger.priority].severity;
-
-    // Mark acknowledged triggers with different color
-    if (this.panel.markAckEvents && trigger.acknowledges && trigger.acknowledges.length) {
-      trigger.color = this.panel.ackEventColor;
-    }
-
-    return trigger;
-  }
-
-  setTriggerLastChange(trigger) {
-    if (!trigger.lastchangeUnix) {
-      trigger.lastchange = "";
-      trigger.age = "";
-      return trigger;
-    }
-
-    let timestamp = moment.unix(trigger.lastchangeUnix);
-    if (this.panel.customLastChangeFormat) {
-      // User defined format
-      trigger.lastchange = timestamp.format(this.panel.lastChangeFormat);
-    } else {
-      trigger.lastchange = timestamp.format(this.defaultTimeFormat);
-    }
-    trigger.age = timestamp.fromNow(true);
     return trigger;
   }
 
@@ -449,40 +495,35 @@ export class TriggerPanelCtrl extends PanelCtrl {
     this.refresh();
   }
 
-  switchComment(trigger) {
-    trigger.showComment = !trigger.showComment;
+  removeTagFilter(tag, ds) {
+    let tagFilter = this.panel.targets[ds].tags.filter;
+    let targetTags = this.parseTags(tagFilter);
+    _.remove(targetTags, t => t.tag === tag.tag && t.value === tag.value);
+    targetTags = _.uniqWith(targetTags, _.isEqual);
+    let newFilter = this.tagsToString(targetTags);
+    this.panel.targets[ds].tags.filter = newFilter;
+    this.refresh();
   }
 
-  acknowledgeTrigger(trigger, message) {
-    let eventid = trigger.lastEvent ? trigger.lastEvent.eventid : null;
-    let grafana_user = this.contextSrv.user.name;
-    let ack_message = grafana_user + ' (Grafana): ' + message;
-    return this.datasourceSrv.get(trigger.datasource)
+  getProblemEvents(problem) {
+    const triggerids = [problem.triggerid];
+    const timeFrom = Math.ceil(dateMath.parse(this.range.from) / 1000);
+    const timeTo = Math.ceil(dateMath.parse(this.range.to) / 1000);
+    return this.datasourceSrv.get(problem.datasource)
     .then(datasource => {
-      const userIsEditor = this.contextSrv.isEditor || this.contextSrv.isGrafanaAdmin;
-      if (datasource.disableReadOnlyUsersAck && !userIsEditor) {
-        return Promise.reject({message: 'You have no permissions to acknowledge events.'});
-      }
-      if (eventid) {
-        return datasource.zabbix.zabbixAPI.acknowledgeEvent(eventid, ack_message);
-      } else {
-        return Promise.reject({message: 'Trigger has no events. Nothing to acknowledge.'});
-      }
-    })
-    .then(this.onRefresh.bind(this))
-    .catch((err) => {
-      this.error = err.message || "Acknowledge Error";
-      this.events.emit('data-error', err);
-      console.log('Panel data error:', err);
+      return datasource.zabbix.getEvents(triggerids, timeFrom, timeTo, [0, 1], PROBLEM_EVENTS_LIMIT);
     });
   }
 
-  getCurrentTriggersPage() {
-    let pageSize = this.panel.pageSize || PANEL_DEFAULTS.pageSize;
-    let startPos = this.pageIndex * pageSize;
-    let endPos = Math.min(startPos + pageSize, this.triggerList.length);
-    this.currentTriggersPage = this.triggerList.slice(startPos, endPos);
-    return this.currentTriggersPage;
+  getProblemAlerts(problem) {
+    if (!problem.lastEvent || problem.lastEvent.length === 0) {
+      return Promise.resolve([]);
+    }
+    const eventids = [problem.lastEvent.eventid];
+    return this.datasourceSrv.get(problem.datasource)
+    .then(datasource => {
+      return datasource.zabbix.getEventAlerts(eventids);
+    });
   }
 
   formatHostName(trigger) {
@@ -491,6 +532,9 @@ export class TriggerPanelCtrl extends PanelCtrl {
       host = `${trigger.host} (${trigger.hostTechName})`;
     } else if (this.panel.hostField || this.panel.hostTechNameField) {
       host = this.panel.hostField ? trigger.host : trigger.hostTechName;
+    }
+    if (this.panel.hostProxy && trigger.proxy) {
+      host = `${trigger.proxy}: ${host}`;
     }
 
     return host;
@@ -510,6 +554,16 @@ export class TriggerPanelCtrl extends PanelCtrl {
     }
 
     return groupNames;
+  }
+
+  isNewTrigger(trigger) {
+    try {
+      const highlightIntervalMs = utils.parseInterval(this.panel.highlightNewerThan || PANEL_DEFAULTS.highlightNewerThan);
+      const durationSec = (Date.now() - trigger.lastchangeUnix * 1000);
+      return durationSec < highlightIntervalMs;
+    } catch (e) {
+      return false;
+    }
   }
 
   getAlertIconClass(trigger) {
@@ -554,120 +608,104 @@ export class TriggerPanelCtrl extends PanelCtrl {
     return statusClass;
   }
 
-  getBackground(trigger) {
-    const mainColor = trigger.color;
-    const secondColor = this.contextSrv.user.lightTheme ? '#dde4ed' : '#262628';
-    if (this.contextSrv.user.lightTheme) {
-      return `linear-gradient(135deg, ${secondColor}, ${mainColor})`;
-    }
-    return `linear-gradient(135deg, ${mainColor}, ${secondColor})`;
+  resetResizedColumns() {
+    this.panel.resizedColumns = [];
+    this.render();
   }
 
-  isNewTrigger(trigger) {
-    try {
-      const highlightIntervalMs = utils.parseInterval(this.panel.highlightNewerThan || PANEL_DEFAULTS.highlightNewerThan);
-      const durationSec = (Date.now() - trigger.lastchangeUnix * 1000);
-      return durationSec < highlightIntervalMs;
-    } catch (e) {
-      return false;
-    }
+  acknowledgeTrigger(trigger, message) {
+    let eventid = trigger.lastEvent ? trigger.lastEvent.eventid : null;
+    let grafana_user = this.contextSrv.user.name;
+    let ack_message = grafana_user + ' (Grafana): ' + message;
+    return this.datasourceSrv.get(trigger.datasource)
+    .then(datasource => {
+      const userIsEditor = this.contextSrv.isEditor || this.contextSrv.isGrafanaAdmin;
+      if (datasource.disableReadOnlyUsersAck && !userIsEditor) {
+        return Promise.reject({message: 'You have no permissions to acknowledge events.'});
+      }
+      if (eventid) {
+        return datasource.zabbix.acknowledgeEvent(eventid, ack_message);
+      } else {
+        return Promise.reject({message: 'Trigger has no events. Nothing to acknowledge.'});
+      }
+    })
+    .then(this.onRefresh.bind(this))
+    .catch((err) => {
+      this.setPanelError(err);
+    });
+  }
+
+  handlePageSizeChange(pageSize, pageIndex) {
+    this.panel.pageSize = pageSize;
+    this.pageIndex = pageIndex;
+    this.scope.$apply(() => {
+      this.render();
+    });
+  }
+
+  handleColumnResize(newResized) {
+    this.panel.resizedColumns = newResized;
+    this.scope.$apply(() => {
+      this.render();
+    });
   }
 
   link(scope, elem, attrs, ctrl) {
     let panel = ctrl.panel;
-    let pageCount = 0;
     let triggerList = ctrl.triggerList;
 
-    scope.$watchGroup(['ctrl.currentTriggersPage', 'ctrl.triggerList'], renderPanel);
-    elem.on('click', '.triggers-panel-page-link', switchPage);
+    scope.$watchGroup(['ctrl.triggerList'], renderPanel);
     ctrl.events.on('render', (renderData) => {
       triggerList = renderData || triggerList;
       renderPanel();
     });
 
-    function getContentHeight() {
-      let panelHeight = ctrl.height;
-      if (pageCount > 1) {
-        panelHeight -= 36;
-      }
-      return panelHeight + 'px';
-    }
-
-    function switchPage(e) {
-      let el = $(e.currentTarget);
-      ctrl.pageIndex = (parseInt(el.text(), 10)-1);
-
-      let pageSize = panel.pageSize || 10;
-      let startPos = ctrl.pageIndex * pageSize;
-      let endPos = Math.min(startPos + pageSize, triggerList.length);
-      ctrl.currentTriggersPage = triggerList.slice(startPos, endPos);
-
-      scope.$apply(() => {
-        renderPanel();
-      });
-    }
-
-    function appendPaginationControls(footerElem) {
-      footerElem.empty();
-
-      let pageSize = panel.pageSize || 5;
-      pageCount = Math.ceil(triggerList.length / pageSize);
-      if (pageCount === 1) {
-        return;
-      }
-
-      let startPage = Math.max(ctrl.pageIndex - 3, 0);
-      let endPage = Math.min(pageCount, startPage + 9);
-
-      let paginationList = $('<ul></ul>');
-
-      for (let i = startPage; i < endPage; i++) {
-        let activeClass = i === ctrl.pageIndex ? 'active' : '';
-        let pageLinkElem = $('<li><a class="triggers-panel-page-link pointer ' + activeClass + '">' + (i+1) + '</a></li>');
-        paginationList.append(pageLinkElem);
-      }
-
-      footerElem.append(paginationList);
-    }
-
-    function setFontSize() {
-      const fontSize = parseInt(panel.fontSize.slice(0, panel.fontSize.length - 1));
-      let triggerCardElem = elem.find('.alert-rule-item');
-      if (fontSize && fontSize !== 100) {
-        triggerCardElem.find('.alert-rule-item__icon').css({
-          'font-size': fontSize + '%',
-          'margin': fontSize / 100 * 6 + 'px'
-        });
-        triggerCardElem.find('.alert-rule-item__name').css({'font-size': fontSize + '%'});
-        triggerCardElem.find('.alert-rule-item__text').css({'font-size': fontSize * 0.8 + '%'});
-        triggerCardElem.find('.zbx-trigger-lastchange').css({'font-size': fontSize * 0.8 + '%'});
-        triggerCardElem.find('.zbx-tag').css({'font-size': fontSize * 0.6 + '%'});
-        triggerCardElem.find('.zbx-tag').css({'line-height': fontSize / 100 * 16 + 'px'});
-      } else {
-        // remove css
-        triggerCardElem.find('.alert-rule-item__icon').css({'font-size': '', 'margin-right': ''});
-        triggerCardElem.find('.alert-rule-item__name').css({'font-size': ''});
-        triggerCardElem.find('.alert-rule-item__text').css({'font-size': ''});
-        triggerCardElem.find('.zbx-trigger-lastchange').css({'font-size': ''});
-        triggerCardElem.find('.zbx-tag').css({'font-size': ''});
-        triggerCardElem.find('.zbx-tag').css({'line-height': ''});
-      }
-    }
-
     function renderPanel() {
-      let rootElem = elem.find('.triggers-panel-scroll');
-      let footerElem = elem.find('.triggers-panel-footer');
-      appendPaginationControls(footerElem);
-      rootElem.css({'max-height': getContentHeight()});
-      rootElem.css({'height': getContentHeight()});
-      setFontSize();
-      ctrl.renderingCompleted();
-    }
+      const timeFrom = Math.ceil(dateMath.parse(ctrl.range.from) / 1000);
+      const timeTo = Math.ceil(dateMath.parse(ctrl.range.to) / 1000);
 
-    let unbindDestroy = scope.$on('$destroy', function() {
-      elem.off('click', '.triggers-panel-page-link');
-      unbindDestroy();
-    });
+      const fontSize = parseInt(panel.fontSize.slice(0, panel.fontSize.length - 1));
+      const fontSizeProp = fontSize && fontSize !== 100 ? fontSize : null;
+
+      const pageSize = panel.pageSize || 10;
+      const loading = ctrl.loading && (!ctrl.triggerList || !ctrl.triggerList.length);
+
+      let panelOptions = {};
+      for (let prop in PANEL_DEFAULTS) {
+        panelOptions[prop] = ctrl.panel[prop];
+      }
+      const problemsListProps = {
+        problems: ctrl.triggerList,
+        panelOptions,
+        timeRange: { timeFrom, timeTo },
+        loading,
+        pageSize,
+        fontSize: fontSizeProp,
+        getProblemEvents: ctrl.getProblemEvents.bind(ctrl),
+        getProblemAlerts: ctrl.getProblemAlerts.bind(ctrl),
+        onPageSizeChange: ctrl.handlePageSizeChange.bind(ctrl),
+        onColumnResize: ctrl.handleColumnResize.bind(ctrl),
+        onProblemAck: (trigger, data) => {
+          const message = data.message;
+          return ctrl.acknowledgeTrigger(trigger, message);
+        },
+        onTagClick: (tag, datasource, ctrlKey, shiftKey) => {
+          if (ctrlKey || shiftKey) {
+            ctrl.removeTagFilter(tag, datasource);
+          } else {
+            ctrl.addTagFilter(tag, datasource);
+          }
+        }
+      };
+
+      let problemsReactElem;
+      if (panel.layout === 'list') {
+        problemsReactElem = React.createElement(AlertList, problemsListProps);
+      } else {
+        problemsReactElem = React.createElement(ProblemList, problemsListProps);
+      }
+      ReactDOM.render(problemsReactElem, elem.find('.panel-content')[0]);
+    }
   }
 }
 

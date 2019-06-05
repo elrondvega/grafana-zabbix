@@ -5,7 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## [Unreleased]
+## [3.10.2] - 2019-04-23
+### Fixed
+- Direct DB Connection: provisioned datasource fails to load, [#711](https://github.com/alexanderzobnin/grafana-zabbix/issues/711)
+- Functions: `sumSeries` doesn't work in couple with other aggregation functions, [#530](https://github.com/alexanderzobnin/grafana-zabbix/issues/530)
+- Problems panel: performance and memory issues, [#720](https://github.com/alexanderzobnin/grafana-zabbix/issues/720), [#712](https://github.com/alexanderzobnin/grafana-zabbix/issues/712)
+- Problems panel: hide acknowledge button for read-only users, [#722](https://github.com/alexanderzobnin/grafana-zabbix/issues/722)
+- Problems panel: "no data" overlaps table header when font size increased, [#717](https://github.com/alexanderzobnin/grafana-zabbix/issues/717)
+- Problems panel: problem description does not resize problem bar, [#704](https://github.com/alexanderzobnin/grafana-zabbix/issues/704)
+- Triggers query mode: problems not filtered by selected groups, [#709](https://github.com/alexanderzobnin/grafana-zabbix/issues/709)
+
+## [3.10.1] - 2019-03-05
+### Fixed
+- Problems panel: unable to edit panel in Grafana 6.0, [#685](https://github.com/alexanderzobnin/grafana-zabbix/issues/685)
+- Problems panel: datasource selector is empty, [#692](https://github.com/alexanderzobnin/grafana-zabbix/issues/692)
+- Problems panel: "acknowledged" filter doesn't work correctly, [#678](https://github.com/alexanderzobnin/grafana-zabbix/issues/678) [#691](https://github.com/alexanderzobnin/grafana-zabbix/issues/691)
+- Problems panel: acknowledged color isn't working, [#676](https://github.com/alexanderzobnin/grafana-zabbix/issues/676)
+- Problems panel: highlight background doesn't work correctly for resolved events in List view, [#681](https://github.com/alexanderzobnin/grafana-zabbix/issues/681)
+- Problems panel: duplicated page size entries, [#696](https://github.com/alexanderzobnin/grafana-zabbix/issues/696)
+- Direct DB Connection: unable to get trends data from InfluxDB, [#675](https://github.com/alexanderzobnin/grafana-zabbix/issues/675)
+- Annotations are not displayed when time set to a full day/week/month, [#680](https://github.com/alexanderzobnin/grafana-zabbix/issues/680)
+- Datasource provisioning with direct DB connection enabled failed [#688](https://github.com/alexanderzobnin/grafana-zabbix/issues/688)
+- Functions: `offset` function returns `NaN` in singlestat panel, [#683](https://github.com/alexanderzobnin/grafana-zabbix/issues/683)
+- Functions: `median()` doesn't correspond to `aggregateBy(median)`, [#690](https://github.com/alexanderzobnin/grafana-zabbix/issues/690)
+- Docs: add warnings about installation methods, [#693](https://github.com/alexanderzobnin/grafana-zabbix/issues/693)
+
+
+## [3.10.0] - 2019-02-14
+### Added
+- Table-like layout for Problems (former Triggers) panel, [#673](https://github.com/alexanderzobnin/grafana-zabbix/issues/673)
+- Problems panel: able to show last problems from dashboard time range, [#550](https://github.com/alexanderzobnin/grafana-zabbix/issues/550)
+- Problems panel: filter problems by event tags, [#487](https://github.com/alexanderzobnin/grafana-zabbix/issues/487)
+- Problems panel: option for displaying groups and proxy, [#418](https://github.com/alexanderzobnin/grafana-zabbix/issues/418)
+- Support InfluxDB as Direct DB Connection datasource, [#640](https://github.com/alexanderzobnin/grafana-zabbix/issues/640), collaboration with [Gleb Ivanovsky aka @i-ky](https://github.com/i-ky)
+- Support datasource provisioning with direct DB connection enabled, [#614](https://github.com/alexanderzobnin/grafana-zabbix/issues/614)
+- Functions: `offset` function, [#387](https://github.com/alexanderzobnin/grafana-zabbix/issues/387), thanks to [@drakosha](https://github.com/drakosha)
+- Functions: `removeAboveValue`, `removeBelowValue`, `transformNull` functions, [#562](https://github.com/alexanderzobnin/grafana-zabbix/issues/562), thanks to [@gelonsoft](https://github.com/gelonsoft)
+
+### Fixed
+- _t.replace is not a function_ error when adding new metric, [#661](https://github.com/alexanderzobnin/grafana-zabbix/issues/661)
+- Problems panel: error when acknowledging problems in Zabbix 4.0, [#629](https://github.com/alexanderzobnin/grafana-zabbix/issues/629)
+- Problems panel: direct link rendered image, [#605](https://github.com/alexanderzobnin/grafana-zabbix/issues/605)
+- Direct DB Connection: _Cannot read property 'name' of null_ error when no series returned, [#571](https://github.com/alexanderzobnin/grafana-zabbix/issues/571)
+- Direct DB Connection: `consolidateBy(sum)` does not work correctly, [#603](https://github.com/alexanderzobnin/grafana-zabbix/issues/603)
+- Direct DB Connection: `consolidateBy()` affects other metrics in a panel, [#602](https://github.com/alexanderzobnin/grafana-zabbix/issues/602)
+
+### Changed
+- Disable auto-creation of Zabbix/Linux Server dashboards (still can be imported from datasource config page), [#422](https://github.com/alexanderzobnin/grafana-zabbix/issues/422)
+- Use Webpack for building plugin, [#632](https://github.com/alexanderzobnin/grafana-zabbix/issues/632)
+- `dist/` folder removed from repo, installation from github repo doesn't work anymore, [#693](https://github.com/alexanderzobnin/grafana-zabbix/issues/693)
+
 
 ## [3.9.1] - 2018-05-02
 ### Fixed
@@ -46,8 +95,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Added
 - PostgreSQL support for Direct DB Connection.
 - _Triggers_ query mode which allows to count active alerts by group, host and application, [#141](https://github.com/alexanderzobnin/grafana-zabbix/issues/141)
-- `sortSeries()` function that allows to sort multiple timeseries by name, [#447](https://github.com/alexanderzobnin/grafana-zabbix/issues/447), thanks for [@mdorenkamp](https://github.com/mdorenkamp)
-- `percentil()` function, thanks for [@pedrohrf](https://github.com/pedrohrf)
+- `sortSeries()` function that allows to sort multiple timeseries by name, [#447](https://github.com/alexanderzobnin/grafana-zabbix/issues/447), thanks to [@mdorenkamp](https://github.com/mdorenkamp)
+- `percentil()` function, thanks to [@pedrohrf](https://github.com/pedrohrf)
 - _Zabbix System Status_ example dashboard.
 
 ### Changed
@@ -59,7 +108,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - "data points outside time range" error when there is no datapoints and aggregation function is used
 - Missed Max data points option in Grafana 4.5+
 - Missed query editor help in Grafana 4.5+
-- Alert threshold detection with `<=` `>=` `=` operators, thanks for [@akotynski](https://github.com/akotynski).
+- Alert threshold detection with `<=` `>=` `=` operators, thanks to [@akotynski](https://github.com/akotynski).
 
 ## [3.6.1] - 2017-07-26
 ### Fixed
@@ -95,7 +144,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Changed
 - Template query format. New format is `{group}{host}{app}{item}`. It allows to use names with dot. Updated 
-  [templating docs](http://docs.grafana-zabbix.org/guides/templating/#query-format), 
+  [templating docs](https://alexanderzobnin.github.io/grafana-zabbix/guides/templating/#query-format), 
   [#254](https://github.com/alexanderzobnin/grafana-zabbix/issues/254)
 - Update included dashboards. Add templated zabbix datasource and use it for all metrics.
 - Improved performance of groupBy() functions (at 6-10x faster than old).
@@ -150,7 +199,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - setAliasByRegex() function
 
 ### Changed
-- **Docs**: deprecate special repo with builded plugin.
+- **Docs**: deprecate special repo with built plugins.
 - **Triggers panel**: remove 'default' from datasources list (cause error), iss [#340](https://github.com/alexanderzobnin/grafana-zabbix/issues/340)
 - Add dist/ directory to repo to correspond development guide http://docs.grafana.org/plugins/development/
 

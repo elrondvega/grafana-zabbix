@@ -45,6 +45,15 @@ addFuncDef({
 });
 
 addFuncDef({
+  name: 'offset',
+  category: 'Transform',
+  params: [
+    { name: 'delta', type: 'float', options: [-100, 100]}
+  ],
+  defaultParams: [100],
+});
+
+addFuncDef({
   name: 'delta',
   category: 'Transform',
   params: [],
@@ -76,6 +85,33 @@ addFuncDef({
   defaultParams: [0.2],
 });
 
+addFuncDef({
+  name: 'removeAboveValue',
+  category: 'Transform',
+  params: [
+    {name: 'number', type: 'float'},
+  ],
+  defaultParams: [0],
+});
+
+addFuncDef({
+  name: 'removeBelowValue',
+  category: 'Transform',
+  params: [
+    {name: 'number', type: 'float'},
+  ],
+  defaultParams: [0],
+});
+
+addFuncDef({
+  name: 'transformNull',
+  category: 'Transform',
+  params: [
+    {name: 'number', type: 'float'}
+  ],
+  defaultParams: [0],
+});
+
 // Aggregate
 
 addFuncDef({
@@ -104,7 +140,7 @@ addFuncDef({
 });
 
 addFuncDef({
-  name: 'percentil',
+  name: 'percentile',
   category: 'Aggregate',
   params: [
     { name: 'interval', type: 'string' },

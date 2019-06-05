@@ -1,5 +1,6 @@
 import _ from 'lodash';
-import * as dateMath from 'app/core/utils/datemath';
+import config from 'grafana/app/core/config';
+import * as dateMath from 'grafana/app/core/utils/datemath';
 import * as utils from './utils';
 import * as migrations from './migrations';
 import * as metricFunctions from './metricFunctions';
@@ -9,12 +10,16 @@ import responseHandler from './responseHandler';
 import { Zabbix } from './zabbix/zabbix';
 import { ZabbixAPIError } from './zabbix/connectors/zabbix_api/zabbixAPICore';
 
+const DEFAULT_ZABBIX_VERSION = 3;
+
 export class ZabbixDatasource {
 
   /** @ngInject */
   constructor(instanceSettings, templateSrv, backendSrv, datasourceSrv, zabbixAlertingSrv) {
     this.templateSrv = templateSrv;
     this.zabbixAlertingSrv = zabbixAlertingSrv;
+
+    this.enableDebugLog = config.buildInfo.env === 'development';
 
     // Use custom format for template variables
     this.replaceTemplateVars = _.partial(replaceTemplateVars, this.templateSrv);
@@ -52,11 +57,13 @@ export class ZabbixDatasource {
 
     // Other options
     this.disableReadOnlyUsersAck = jsonData.disableReadOnlyUsersAck;
+    this.zabbixVersion = jsonData.zabbixVersion || DEFAULT_ZABBIX_VERSION;
 
     // Direct DB Connection options
     this.enableDirectDBConnection = jsonData.dbConnectionEnable || false;
     this.dbConnectionDatasourceId = jsonData.dbConnectionDatasourceId;
     this.dbConnectionDatasourceName = jsonData.dbConnectionDatasourceName;
+    this.dbConnectionRetentionPolicy = jsonData.dbConnectionRetentionPolicy;
 
     let zabbixOptions = {
       url: this.url,
@@ -65,13 +72,15 @@ export class ZabbixDatasource {
       basicAuth: this.basicAuth,
       authpassthru: this.authpassthru,
       withCredentials: this.withCredentials,
+      zabbixVersion: this.zabbixVersion,
       cacheTTL: this.cacheTTL,
       enableDirectDBConnection: this.enableDirectDBConnection,
       dbConnectionDatasourceId: this.dbConnectionDatasourceId,
-      dbConnectionDatasourceName: this.dbConnectionDatasourceName
+      dbConnectionDatasourceName: this.dbConnectionDatasourceName,
+      dbConnectionRetentionPolicy: this.dbConnectionRetentionPolicy,
     };
 
-    this.zabbix = new Zabbix(zabbixOptions, backendSrv, datasourceSrv);
+    this.zabbix = new Zabbix(zabbixOptions, datasourceSrv, backendSrv);
   }
 
   ////////////////////////
@@ -110,6 +119,9 @@ export class ZabbixDatasource {
 
       // Prevent changes of original object
       let target = _.cloneDeep(t);
+
+      // Migrate old targets
+      target = migrations.migrate(target);
       this.replaceTargetVariables(target, options);
 
       // Apply Time-related functions (timeShift(), etc)
@@ -125,9 +137,6 @@ export class ZabbixDatasource {
 
       // Metrics or Text query mode
       if (!target.mode || target.mode === c.MODE_METRICS || target.mode === c.MODE_TEXT) {
-        // Migrate old targets
-        target = migrations.migrate(target);
-
         // Don't request undefined targets
         if (!target.group || !target.host || !target.item) {
           return [];
@@ -167,11 +176,21 @@ export class ZabbixDatasource {
    * Query target data for Metrics mode
    */
   queryNumericData(target, timeRange, useTrends, options) {
+    let queryStart, queryEnd;
     let getItemOptions = {
       itemtype: 'num'
     };
     return this.zabbix.getItemsFromTarget(target, getItemOptions)
-    .then(items => this.queryNumericDataForItems(items, target, timeRange, useTrends, options));
+    .then(items => {
+      queryStart = new Date().getTime();
+      return this.queryNumericDataForItems(items, target, timeRange, useTrends, options);
+    }).then(result => {
+      queryEnd = new Date().getTime();
+      if (this.enableDebugLog) {
+        console.debug(`Datasource::Performance Query Time (${this.name}): ${queryEnd - queryStart}`);
+      }
+      return result;
+    });
   }
 
   /**
@@ -317,7 +336,7 @@ export class ZabbixDatasource {
   queryTriggersData(target, timeRange) {
     let [timeFrom, timeTo] = timeRange;
     return this.zabbix.getHostsFromTarget(target)
-    .then((results) => {
+    .then(results => {
       let [hosts, apps] = results;
       if (hosts.length) {
         let hostids = _.map(hosts, 'hostid');
@@ -329,9 +348,13 @@ export class ZabbixDatasource {
           timeFrom: timeFrom,
           timeTo: timeTo
         };
-        return this.zabbix.getHostAlerts(hostids, appids, options)
-        .then((triggers) => {
-          return responseHandler.handleTriggersResponse(triggers, timeRange);
+        const groupFilter = target.group.filter;
+        return Promise.all([
+          this.zabbix.getHostAlerts(hostids, appids, options),
+          this.zabbix.getGroups(groupFilter)
+        ])
+        .then(([triggers, groups]) => {
+          return responseHandler.handleTriggersResponse(triggers, groups, timeRange);
         });
       } else {
         return Promise.resolve([]);
@@ -383,6 +406,20 @@ export class ZabbixDatasource {
           message: "Could not connect to given url"
         };
       }
+    });
+  }
+
+  /**
+   * Get Zabbix version
+   */
+  getVersion() {
+    return this.zabbix.getVersion()
+    .then(version => {
+      const zabbixVersion = utils.parseVersion(version);
+      if (!zabbixVersion) {
+        return null;
+      }
+      return zabbixVersion.major;
     });
   }
 
@@ -443,8 +480,9 @@ export class ZabbixDatasource {
   /////////////////
 
   annotationQuery(options) {
-    var timeFrom = Math.ceil(dateMath.parse(options.rangeRaw.from) / 1000);
-    var timeTo = Math.ceil(dateMath.parse(options.rangeRaw.to) / 1000);
+    const timeRange = options.range || options.rangeRaw;
+    const timeFrom = Math.ceil(dateMath.parse(timeRange.from) / 1000);
+    const timeTo = Math.ceil(dateMath.parse(timeRange.to) / 1000);
     var annotation = options.annotation;
     var showOkEvents = annotation.showOkEvents ? c.SHOW_ALL_EVENTS : c.SHOW_OK_EVENTS;
 
@@ -522,6 +560,7 @@ export class ZabbixDatasource {
     let enabled_targets = filterEnabledTargets(options.targets);
     let getPanelItems = _.map(enabled_targets, t => {
       let target = _.cloneDeep(t);
+      target = migrations.migrate(target);
       this.replaceTargetVariables(target, options);
       return this.zabbix.getItemsFromTarget(target, {itemtype: 'num'});
     });
@@ -590,8 +629,8 @@ export class ZabbixDatasource {
     let useTrendsFrom = Math.ceil(dateMath.parse('now-' + this.trendsFrom) / 1000);
     let useTrendsRange = Math.ceil(utils.parseInterval(this.trendsRange) / 1000);
     let useTrends = this.trends && (
-      (timeFrom <= useTrendsFrom) ||
-      (timeTo - timeFrom >= useTrendsRange)
+      (timeFrom < useTrendsFrom) ||
+      (timeTo - timeFrom > useTrendsRange)
     );
     return useTrends;
   }

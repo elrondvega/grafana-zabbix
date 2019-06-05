@@ -1,6 +1,7 @@
 import _ from 'lodash';
 import * as utils from '../../../utils';
 import { ZabbixAPICore } from './zabbixAPICore';
+import { ZBX_ACK_ACTION_NONE, ZBX_ACK_ACTION_ACK, ZBX_ACK_ACTION_ADD_MESSAGE } from '../../../constants';
 
 /**
  * Zabbix API Wrapper.
@@ -8,11 +9,12 @@ import { ZabbixAPICore } from './zabbixAPICore';
  * Wraps API calls and provides high-level methods.
  */
 export class ZabbixAPIConnector {
-  constructor(api_url, username, password, basicAuth, withCredentials, authpassthru, backendSrv) {
+  constructor(api_url, username, password, version, basicAuth, withCredentials, authpassthru, backendSrv) {
     this.url              = api_url;
     this.username         = username;
     this.password         = password;
-    this.auth             = "";
+    this.auth             = '';
+    this.version          = version;
 
     this.requestOptions = {
       basicAuth: basicAuth,
@@ -48,9 +50,7 @@ export class ZabbixAPIConnector {
           .then(() => this.request(method, params));
         }
       } else {
-        // Handle API errors
-        let message = error.data ? error.data : error.statusText;
-        return Promise.reject(message);
+        return Promise.reject(error);
       }
     });
   }
@@ -93,9 +93,11 @@ export class ZabbixAPIConnector {
   ////////////////////////////////
 
   acknowledgeEvent(eventid, message) {
-    var params = {
+    const action = this.version >= 4 ? ZBX_ACK_ACTION_ACK + ZBX_ACK_ACTION_ADD_MESSAGE : ZBX_ACK_ACTION_NONE;
+    const params = {
       eventids: eventid,
-      message: message
+      message: message,
+      action: action
     };
 
     return this.request('event.acknowledge', params);
@@ -349,7 +351,7 @@ export class ZabbixAPIConnector {
         value: 1
       },
       selectGroups: ['name'],
-      selectHosts: ['name', 'host', 'maintenance_status'],
+      selectHosts: ['name', 'host', 'maintenance_status', 'proxy_hostid'],
       selectItems: ['name', 'key_', 'lastvalue'],
       selectLastEvent: 'extend',
       selectTags: 'extend'
@@ -371,7 +373,7 @@ export class ZabbixAPIConnector {
     return this.request('trigger.get', params);
   }
 
-  getEvents(objectids, timeFrom, timeTo, showEvents) {
+  getEvents(objectids, timeFrom, timeTo, showEvents, limit) {
     var params = {
       output: 'extend',
       time_from: timeFrom,
@@ -379,8 +381,14 @@ export class ZabbixAPIConnector {
       objectids: objectids,
       select_acknowledges: 'extend',
       selectHosts: 'extend',
-      value: showEvents
+      value: showEvents,
     };
+
+    if (limit) {
+      params.limit = limit;
+      params.sortfield = 'clock';
+      params.sortorder = 'DESC';
+    }
 
     return this.request('event.get', params);
   }
@@ -399,6 +407,35 @@ export class ZabbixAPIConnector {
     .then(events => {
       return _.filter(events, (event) => event.acknowledges.length);
     });
+  }
+
+  getExtendedEventData(eventids) {
+    var params = {
+      output: 'extend',
+      eventids: eventids,
+      preservekeys: true,
+      select_acknowledges: 'extend',
+      selectTags: 'extend',
+      sortfield: 'clock',
+      sortorder: 'DESC'
+    };
+
+    return this.request('event.get', params);
+  }
+
+  getEventAlerts(eventids) {
+    const params = {
+      eventids: eventids,
+      output: [
+        'eventid',
+        'message',
+        'clock',
+        'error'
+      ],
+      selectUsers: true,
+    };
+
+    return this.request('alert.get', params);
   }
 
   getAlerts(itemids, timeFrom, timeTo) {
@@ -465,6 +502,14 @@ export class ZabbixAPIConnector {
       }
       return triggers;
     });
+  }
+
+  getProxies() {
+    var params = {
+      output: ['proxyid', 'host'],
+    };
+
+    return this.request('proxy.get', params);
   }
 }
 

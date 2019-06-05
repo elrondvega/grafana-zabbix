@@ -4,6 +4,96 @@
 
 .triggers-panel-container {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  .card-section {
+    padding: 2px;
+    margin-bottom: 0.4rem;
+    overflow: auto;
+
+    .alert-rule-list {
+      .alert-rule-item {
+        .alert-rule-item__text {
+          display: flex;
+          max-height: 1.6em;
+          overflow: hidden;
+          align-items: center;
+          padding-right: 1em;
+
+          &.zbx-description--newline {
+            max-height: unset;
+
+            .zbx-description {
+              margin-left: 0px;
+            }
+          }
+
+          .zbx-description {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          span {
+            padding-right: 0.4em;
+          }
+
+        }
+      }
+
+      @for $i from 8 through 9 {
+        &.font-size--#{$i * 10} {
+          &,
+          .alert-rule-item__name {
+            font-size: 1% * $i * 10;
+          }
+
+          .alert-rule-item__icon {
+            width: unset;
+            font-size: 1% * $i * 10;
+          }
+
+          .alert-rule-item__time,
+          .alert-rule-item__text,
+          .zabbix-hostname {
+            font-size: 1% * $i * 10 * 0.8;
+          }
+
+          .zbx-trigger-tags .label-tag {
+            font-size: 1% * $i * 10 * 0.6;
+            padding: 0.3em 0.3em;
+          }
+        }
+      }
+
+      @for $i from 11 through 25 {
+        &.font-size--#{$i * 10} {
+          &,
+          .alert-rule-item__name {
+            font-size: 1% * $i * 10;
+          }
+
+          .alert-rule-item__icon {
+            width: unset;
+            font-size: 1% * $i * 10;
+          }
+
+          .alert-rule-item__time,
+          .alert-rule-item__text,
+          .zabbix-hostname {
+            font-size: 1% * $i * 10 * 0.8;
+          }
+
+          .zbx-trigger-tags .label-tag {
+            font-size: 1% * $i * 10 * 0.6;
+            padding: 0.3em 0.3em;
+          }
+        }
+      }
+    }
+  }
 
   .zabbix-trigger-name {
     font-weight: bold;
@@ -11,14 +101,18 @@
 
   .zabbix-hostname {
     color: $gray-2;
-    margin-left: 1rem;
+    margin-left: 1em;
     font-weight: 500;
+
+    i {
+      padding-right: 0.2em;
+    }
   }
 
   .zbx-description {
     color: $gray-3;
     font-weight: normal;
-    margin-left: 0.6rem;
+    margin-left: 0.6em;
 
     &--newline {
       margin-left: 0rem;
@@ -51,9 +145,14 @@
     margin-right: 1.5rem;
     margin-left: 1rem;
     font-weight: 500;
-    .gicon-datasources {
-      opacity: 0.4;
+
+    i {
+      padding-right: 0.4em;
     }
+  }
+
+  .alert-rule-item__icon .icon-gf {
+    right: 0.4rem;
   }
 }
 
@@ -75,6 +174,7 @@
 
 .zbx-trigger-highlighted {
   color: $zbx-text-highlighted;
+  background: linear-gradient(135deg, $zbx-card-background-start, $zbx-card-background-stop);
 
   .alert-rule-item__body,
   .alert-rule-item__header,
@@ -105,10 +205,10 @@
 }
 
 .triggers-panel-footer {
+  margin-top: auto;
   text-align: center;
   font-size: 90%;
   line-height: 2px;
-  padding-top: 4px;
 
   ul {
     position: relative;
@@ -137,10 +237,8 @@
 }
 
 .ack-tooltip {
-  .drop-content {
-    // Rewrite tooltip width
-    max-width: 70rem !important;
-    min-width: 30rem !important;
+  &.popper {
+    max-width: 800px;
   }
 
   .ack-comments {
@@ -148,25 +246,13 @@
   }
 
   .ack-add-button {
-    padding-top: 1rem;
+    padding-top: 0.4rem;
+    text-align: left;
   }
 
   table td, th {
     padding-right: 1rem;
-  }
-
-  .ack-input-group {
-    padding-top: 1rem;
-
-    input {
-      border: 1px solid;
-      border-radius: 2px;
-      width: 50%;
-    }
-
-    button {
-      margin-left: 1rem;
-    }
+    text-align: left;
   }
 }
 
@@ -179,5 +265,19 @@
 
   .icon-gf {
     font-size: 200%;
+  }
+}
+
+// fix for phantomjs (it has troubles with flex blocks rendering)
+.body--phantomjs {
+  .triggers-panel-container {
+    .alert-rule-list {
+      display: block;
+    }
+
+    .alert-rule-item__body,
+    .alert-rule-item__icon {
+      display: block;
+    }
   }
 }

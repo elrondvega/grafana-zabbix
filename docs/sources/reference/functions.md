@@ -38,6 +38,7 @@ delta()
 ```
 Converts absolute values to delta. This function just calculate difference between values. For the per-second
 calculation use `rate()`.
+
 ---
 
 ### _rate_
@@ -46,6 +47,7 @@ rate()
 ```
 Calculates the per-second rate of increase of the time series. Resistant to counter reset. Suitable for converting of
 growing counters into the per-sercond rate.
+
 ---
 
 ### _movingAverage_
@@ -84,6 +86,35 @@ Examples:
 movingAverage(60)
 calculates moving average over 60 points (if metric has 1 second resolution it matches 1 minute window)
 ```
+---
+
+### _removeAboveValue_
+```
+removeAboveValue(N)
+```
+Replaces series values with `null` if value > N
+
+Examples:
+```
+removeAboveValue(1)
+```
+
+---
+
+### _removeBelowValue_
+```
+removeBelowValue(N)
+```
+Replaces series values with `null` if value < N
+
+---
+
+### _transformNull_
+```
+transformNull(N)
+```
+Replaces `null` values with N
+
 ---
 
 ## Aggregate

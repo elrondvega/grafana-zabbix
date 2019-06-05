@@ -1,27 +1,31 @@
 import _ from 'lodash';
 import * as utils from '../utils';
 import responseHandler from '../responseHandler';
-import { ZabbixAPIConnector } from './connectors/zabbix_api/zabbixAPIConnector';
-import { SQLConnector } from './connectors/sql/sqlConnector';
 import { CachingProxy } from './proxy/cachingProxy';
 import { ZabbixNotImplemented } from './connectors/dbConnector';
+import { DBConnector } from './connectors/dbConnector';
+import { ZabbixAPIConnector } from './connectors/zabbix_api/zabbixAPIConnector';
+import { SQLConnector } from './connectors/sql/sqlConnector';
+import { InfluxDBConnector } from './connectors/influxdb/influxdbConnector';
 
 const REQUESTS_TO_PROXYFY = [
   'getHistory', 'getTrend', 'getGroups', 'getHosts', 'getApps', 'getItems', 'getMacros', 'getItemsByIDs',
-  'getEvents', 'getAlerts', 'getHostAlerts', 'getAcknowledges', 'getITService', 'getSLA', 'getVersion'
+  'getEvents', 'getAlerts', 'getHostAlerts', 'getAcknowledges', 'getITService', 'getSLA', 'getVersion', 'getProxies',
+  'getEventAlerts', 'getExtendedEventData'
 ];
 
 const REQUESTS_TO_CACHE = [
-  'getGroups', 'getHosts', 'getApps', 'getItems', 'getMacros', 'getItemsByIDs', 'getITService'
+  'getGroups', 'getHosts', 'getApps', 'getItems', 'getMacros', 'getItemsByIDs', 'getITService', 'getProxies'
 ];
 
 const REQUESTS_TO_BIND = [
   'getHistory', 'getTrend', 'getMacros', 'getItemsByIDs', 'getEvents', 'getAlerts', 'getHostAlerts',
-  'getAcknowledges', 'getITService', 'getVersion', 'login'
+  'getAcknowledges', 'getITService', 'getVersion', 'login', 'acknowledgeEvent', 'getProxies', 'getEventAlerts',
+  'getExtendedEventData'
 ];
 
 export class Zabbix {
-  constructor(options, backendSrv, datasourceSrv) {
+  constructor(options, datasourceSrv, backendSrv) {
     let {
       url,
       username,
@@ -29,10 +33,12 @@ export class Zabbix {
       basicAuth,
       authpassthru,
       withCredentials,
+      zabbixVersion,
       cacheTTL,
       enableDirectDBConnection,
       dbConnectionDatasourceId,
       dbConnectionDatasourceName,
+      dbConnectionRetentionPolicy,
     } = options;
 
     this.enableDirectDBConnection = enableDirectDBConnection;
@@ -44,21 +50,34 @@ export class Zabbix {
     };
     this.cachingProxy = new CachingProxy(cacheOptions);
 
-    this.zabbixAPI = new ZabbixAPIConnector(url, username, password, basicAuth, withCredentials, authpassthru, backendSrv);
-
-    if (enableDirectDBConnection) {
-      let dbConnectorOptions = {
-        datasourceId: dbConnectionDatasourceId,
-        datasourceName: dbConnectionDatasourceName
-      };
-      this.dbConnector = new SQLConnector(dbConnectorOptions, backendSrv, datasourceSrv);
-      this.getHistoryDB = this.cachingProxy.proxyfyWithCache(this.dbConnector.getHistory, 'getHistory', this.dbConnector);
-      this.getTrendsDB = this.cachingProxy.proxyfyWithCache(this.dbConnector.getTrends, 'getTrends', this.dbConnector);
-    }
+    this.zabbixAPI = new ZabbixAPIConnector(url, username, password, zabbixVersion, basicAuth, withCredentials, backendSrv);
 
     this.proxyfyRequests();
     this.cacheRequests();
     this.bindRequests();
+
+    if (enableDirectDBConnection) {
+      const connectorOptions = { dbConnectionRetentionPolicy };
+      this.initDBConnector(dbConnectionDatasourceId, dbConnectionDatasourceName, datasourceSrv, connectorOptions)
+      .then(() => {
+        this.getHistoryDB = this.cachingProxy.proxyfyWithCache(this.dbConnector.getHistory, 'getHistory', this.dbConnector);
+        this.getTrendsDB = this.cachingProxy.proxyfyWithCache(this.dbConnector.getTrends, 'getTrends', this.dbConnector);
+      });
+    }
+  }
+
+  initDBConnector(datasourceId, datasourceName, datasourceSrv, options) {
+    return DBConnector.loadDatasource(datasourceId, datasourceName, datasourceSrv)
+    .then(ds => {
+      let connectorOptions = { datasourceId, datasourceName };
+      if (ds.type === 'influxdb') {
+        connectorOptions.retentionPolicy = options.dbConnectionRetentionPolicy;
+        this.dbConnector = new InfluxDBConnector(connectorOptions, datasourceSrv);
+      } else {
+        this.dbConnector = new SQLConnector(connectorOptions, datasourceSrv);
+      }
+      return this.dbConnector;
+    });
   }
 
   proxyfyRequests() {
@@ -243,7 +262,7 @@ export class Zabbix {
   /**
    * Build query - convert target filters to array of Zabbix items
    */
-  getTriggers(groupFilter, hostFilter, appFilter, options) {
+  getTriggers(groupFilter, hostFilter, appFilter, options, proxyFilter) {
     let promises = [
       this.getGroups(groupFilter),
       this.getHosts(groupFilter, hostFilter),
@@ -252,9 +271,7 @@ export class Zabbix {
 
     return Promise.all(promises)
     .then(results => {
-      let filteredGroups = results[0];
-      let filteredHosts = results[1];
-      let filteredApps = results[2];
+      let [filteredGroups, filteredHosts, filteredApps] = results;
       let query = {};
 
       if (appFilter) {
@@ -268,8 +285,36 @@ export class Zabbix {
       }
 
       return query;
-    }).then(query => {
-      return this.zabbixAPI.getTriggers(query.groupids, query.hostids, query.applicationids, options);
+    })
+    .then(query => this.zabbixAPI.getTriggers(query.groupids, query.hostids, query.applicationids, options))
+    .then(triggers => this.filterTriggersByProxy(triggers, proxyFilter));
+  }
+
+  filterTriggersByProxy(triggers, proxyFilter) {
+    return this.getFilteredProxies(proxyFilter)
+    .then(proxies => {
+      if (proxyFilter && proxyFilter !== '/.*/' && triggers) {
+        const proxy_ids = proxies.map(proxy => proxy.proxyid);
+        triggers = triggers.filter(trigger => {
+          let filtered = false;
+          for(let i = 0; i < trigger.hosts.length; i++) {
+            const host = trigger.hosts[i];
+            if (proxy_ids.includes(host.proxy_hostid)) {
+              filtered = true;
+            }
+          }
+          return filtered;
+        });
+      }
+      return triggers;
+    });
+  }
+
+  getFilteredProxies(proxyFilter) {
+    return this.zabbixAPI.getProxies()
+    .then(proxies => {
+      proxies.forEach(proxy => proxy.name = proxy.host);
+      return findByFilter(proxies, proxyFilter);
     });
   }
 

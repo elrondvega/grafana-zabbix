@@ -191,6 +191,17 @@ function scale_perf(datapoints, factor) {
   return datapoints;
 }
 
+function offset(datapoints, delta) {
+  for (let i = 0; i < datapoints.length; i++) {
+    datapoints[i] = [
+      datapoints[i][POINT_VALUE] + delta,
+      datapoints[i][POINT_TIMESTAMP]
+    ];
+  }
+
+  return datapoints;
+}
+
 /**
  * Simple delta. Calculate value delta between points.
  * @param {*} datapoints
@@ -322,7 +333,7 @@ function expMovingAverage(datapoints, n) {
   return ema;
 }
 
-function PERCENTIL(n, values) {
+function PERCENTILE(n, values) {
   var sorted = _.sortBy(values);
   return sorted[Math.floor(sorted.length * n / 100)];
 }
@@ -467,6 +478,15 @@ function findNearestLeft(series, pointIndex) {
   return null;
 }
 
+function flattenDatapoints(datapoints) {
+  const depth = utils.getArrayDepth(datapoints);
+  if (depth <= 2) {
+    // Don't process if datapoints already flattened
+    return datapoints;
+  }
+  return _.flatten(datapoints);
+}
+
 ////////////
 // Export //
 ////////////
@@ -477,6 +497,7 @@ const exportedFunctions = {
   groupBy_perf,
   sumSeries,
   scale,
+  offset,
   scale_perf,
   delta,
   rate,
@@ -488,8 +509,9 @@ const exportedFunctions = {
   MIN,
   MAX,
   MEDIAN,
-  PERCENTIL,
-  sortByTime
+  PERCENTILE,
+  sortByTime,
+  flattenDatapoints,
 };
 
 export default exportedFunctions;

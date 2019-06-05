@@ -9,6 +9,7 @@ let sumSeries = ts.sumSeries;
 let delta = ts.delta;
 let rate = ts.rate;
 let scale = (factor, datapoints) => ts.scale_perf(datapoints, factor);
+let offset = (delta, datapoints) => ts.offset(datapoints, delta);
 let simpleMovingAverage = (n, datapoints) => ts.simpleMovingAverage(datapoints, n);
 let expMovingAverage = (a, datapoints) => ts.expMovingAverage(datapoints, a);
 
@@ -18,7 +19,7 @@ let AVERAGE = ts.AVERAGE;
 let MIN = ts.MIN;
 let MAX = ts.MAX;
 let MEDIAN = ts.MEDIAN;
-let PERCENTIL = ts.PERCENTIL;
+let PERCENTILE = ts.PERCENTILE;
 
 function limit(order, n, orderByFunc, timeseries) {
   let orderByCallback = aggregationFunctions[orderByFunc];
@@ -34,6 +35,33 @@ function limit(order, n, orderByFunc, timeseries) {
   } else {
     return sortedTimeseries.slice(-n);
   }
+}
+
+function removeAboveValue(n, datapoints) {
+  return _.map(datapoints, point => {
+    return [
+      (point[0] > n) ? null : point[0],
+      point[1]
+    ];
+  });
+}
+
+function removeBelowValue(n, datapoints) {
+  return _.map(datapoints, point => {
+    return [
+      (point[0] < n) ? null : point[0],
+      point[1]
+    ];
+  });
+}
+
+function transformNull(n, datapoints) {
+  return _.map(datapoints, point => {
+    return [
+      (point[0] !== null) ? point[0] : n,
+      point[1]
+    ];
+  });
 }
 
 function sortSeries(direction, timeseries) {
@@ -79,7 +107,7 @@ function groupByWrapper(interval, groupFunc, datapoints) {
 
 function aggregateByWrapper(interval, aggregateFunc, datapoints) {
   // Flatten all points in frame and then just use groupBy()
-  const flattenedPoints = _.flatten(datapoints, true);
+  const flattenedPoints = ts.flattenDatapoints(datapoints);
   // groupBy_perf works with sorted series only
   const sortedPoints = ts.sortByTime(flattenedPoints);
   let groupByCallback = aggregationFunctions[aggregateFunc];
@@ -87,13 +115,15 @@ function aggregateByWrapper(interval, aggregateFunc, datapoints) {
 }
 
 function aggregateWrapper(groupByCallback, interval, datapoints) {
-  var flattenedPoints = _.flatten(datapoints, true);
-  return groupBy(flattenedPoints, interval, groupByCallback);
+  var flattenedPoints = ts.flattenDatapoints(datapoints);
+  // groupBy_perf works with sorted series only
+  const sortedPoints = ts.sortByTime(flattenedPoints);
+  return groupBy(sortedPoints, interval, groupByCallback);
 }
 
-function percentil(interval, n, datapoints) {
-  var flattenedPoints = _.flatten(datapoints, true);
-  var groupByCallback = _.partial(PERCENTIL, n);
+function percentile(interval, n, datapoints) {
+  var flattenedPoints = ts.flattenDatapoints(datapoints);
+  var groupByCallback = _.partial(PERCENTILE, n);
   return groupBy(flattenedPoints, interval, groupByCallback);
 }
 
@@ -117,13 +147,15 @@ function unShiftTimeSeries(interval, datapoints) {
 let metricFunctions = {
   groupBy: groupByWrapper,
   scale: scale,
+  offset: offset,
   delta: delta,
   rate: rate,
   movingAverage: simpleMovingAverage,
   exponentialMovingAverage: expMovingAverage,
+  transformNull: transformNull,
   aggregateBy: aggregateByWrapper,
   // Predefined aggs
-  percentil: percentil,
+  percentile: percentile,
   average: _.partial(aggregateWrapper, AVERAGE),
   min: _.partial(aggregateWrapper, MIN),
   max: _.partial(aggregateWrapper, MAX),
@@ -131,6 +163,8 @@ let metricFunctions = {
   sum: _.partial(aggregateWrapper, SUM),
   count: _.partial(aggregateWrapper, COUNT),
   sumSeries: sumSeries,
+  removeAboveValue: removeAboveValue,
+  removeBelowValue: removeBelowValue,
   top: _.partial(limit, 'top'),
   bottom: _.partial(limit, 'bottom'),
   sortSeries: sortSeries,

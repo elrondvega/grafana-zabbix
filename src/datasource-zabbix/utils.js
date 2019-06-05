@@ -240,6 +240,42 @@ export function sequence(funcsArray) {
   };
 }
 
+const versionPattern = /^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z\.]+))?/;
+
+export function isValidVersion(version) {
+  return versionPattern.exec(version);
+}
+
+export function parseVersion(version) {
+  const match = versionPattern.exec(version);
+  if (!match) {
+    return null;
+  }
+  const major = Number(match[1]);
+  const minor = Number(match[2] || 0);
+  const patch = Number(match[3] || 0);
+  const meta = match[4];
+  return { major, minor, patch, meta };
+}
+
+/**
+ * Replaces any space-like symbols (tabs, new lines, spaces) by single whitespace.
+ */
+export function compactQuery(query) {
+  return query.replace(/\s+/g, ' ').trim();
+}
+
+export function getArrayDepth(a, level = 0) {
+  if (a.length === 0) {
+    return 1;
+  }
+  const elem = a[0];
+  if (_.isArray(elem)) {
+    return getArrayDepth(elem, level + 1);
+  }
+  return level + 1;
+}
+
 // Fix for backward compatibility with lodash 2.4
 if (!_.includes) {
   _.includes = _.contains;

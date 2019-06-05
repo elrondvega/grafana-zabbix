@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import TableModel from 'app/core/table_model';
+import TableModel from 'grafana/app/core/table_model';
 import * as c from './constants';
 
 /**
@@ -143,25 +143,34 @@ function handleSLAResponse(itservice, slaProperty, slaObject) {
   }
 }
 
-function handleTriggersResponse(triggers, timeRange) {
-  if (_.isNumber(triggers)) {
+function handleTriggersResponse(triggers, groups, timeRange) {
+  if (!_.isArray(triggers)) {
+    let triggersCount = null;
+    try {
+      triggersCount = Number(triggers);
+    } catch (err) {
+      console.log("Error when handling triggers count: ", err);
+    }
     return {
       target: "triggers count",
       datapoints: [
-        [triggers, timeRange[1] * 1000]
+        [triggersCount, timeRange[1] * 1000]
       ]
     };
   } else {
-    let stats = getTriggerStats(triggers);
+    const stats = getTriggerStats(triggers);
+    const groupNames = _.map(groups, 'name');
     let table = new TableModel();
     table.addColumn({text: 'Host group'});
     _.each(_.orderBy(c.TRIGGER_SEVERITY, ['val'], ['desc']), (severity) => {
       table.addColumn({text: severity.text});
     });
     _.each(stats, (severity_stats, group) => {
-      let row = _.map(_.orderBy(_.toPairs(severity_stats), (s) => s[0], ['desc']), (s) => s[1]);
-      row = _.concat([group], ...row);
-      table.rows.push(row);
+      if (_.includes(groupNames, group)) {
+        let row = _.map(_.orderBy(_.toPairs(severity_stats), (s) => s[0], ['desc']), (s) => s[1]);
+        row = _.concat([group], ...row);
+        table.rows.push(row);
+      }
     });
     return table;
   }
